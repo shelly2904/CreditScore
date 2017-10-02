@@ -6,8 +6,8 @@ from Data_Preparation import get_more_variables
 from sklearn.preprocessing import Imputer, LabelEncoder
 from sklearn.feature_selection import RFE
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 #Data files
 data = pd.read_csv(os.path.join(DATA_DIR, DATA_TRAINING_FILE))
@@ -73,7 +73,7 @@ def data_preprocessing(df, training=True):
 
     for col in continous_features:
         df[col] = df[col].astype(np.float)
-        df[col] = df_test[col].fillna(df_test[col].mean())
+        df[col] = df[col].fillna(df[col].mean())
 
     #Conversion of categorical variable
     for col in categorical_features:
@@ -103,27 +103,52 @@ data_test, features= data_preprocessing(data_test, False)
 dataD, targetD = data.ix[:, features], data.ix[:, target] 
 dataTD, targetTD = data_test.ix[:, features], data_test.ix[:, target] 
 
-# Feature Extraction with RFE
-model = LogisticRegression()
-rfe = RFE(model, 88)
-fit = rfe.fit(data, targetD)
-print("Num Features: %d") % fit.n_features_
-print("Selected Features: %s") % fit.support_
 
-features = [features[i] for i in range(0, len(features)) if fit.support_[i] == True]
-dataD, targetD = data.ix[:, features], data.ix[:, target] 
-dataTD, targetTD = data_test.ix[:, features], data_test.ix[:, target] 
+# # Feature Extraction with RFE
+# model = LogisticRegression()
+# rfe = RFE(model, 88)
+# fit = rfe.fit(data, targetD)
+# print("Num Features: %d") % fit.n_features_
+# print("Selected Features: %s") % fit.support_
 
-#Initialize logistic regression model
-model= LogisticRegression()
-model = model_fit(model, dataD, targetD)
-pred = model_prediction(model , dataTD)
-print confusion_matrix(preds, targetTD)
-set_model(model, 'LogisticRegressor.pkl')
+# features = [features[i] for i in range(0, len(features)) if fit.support_[i] == True]
+# dataD, targetD = data.ix[:, features], data.ix[:, target] 
+# dataTD, targetTD = data_test.ix[:, features], data_test.ix[:, target] 
 
-#Initialize Random Forest model
-model= RandomForestClassifier()
-model = model_fit(model, dataD, targetD)
-pred = model_prediction(model , dataTD)
-print confusion_matrix(preds, targetTD)
-set_model(model, 'RandomForestClassifier.pkl')
+# #Initialize logistic regression model
+# model= LogisticRegression()
+# model = model_fit(model, dataD, targetD)
+# pred = model_prediction(model , dataTD)
+# print confusion_matrix(preds, targetTD)
+# set_model(model, 'LogisticRegressor.pkl')
+
+
+max_metric = 0
+for i in range(1,2):
+    for j in range(1, len(features)):
+      for m in range(1,10):
+        model= RandomForestClassifier(n_estimators=i, max_features=j, min_impurity_split=float(m)/10000)
+        model = model_fit(model, dataD, targetD)
+        preds = model_prediction(model , dataTD)
+        if max_metric < f1_score(preds, targetTD):
+            print i,j, m
+            max_metric = f1_score(preds, targetTD)
+            best_model = model
+
+featues_importance = sorted(zip(map(lambda x: round(x, 4), best_model.feature_importances_), features), reverse=True)
+print best_model.get_params()
+for i in featues_importance:
+  print i
+set_model(best_model, 'RandomForestClassifier.pkl')
+print max_metric
+# #Initialize Random Forest model
+# for i in range(0, 1):
+#   model= RandomForestClassifier()
+#   model = model_fit(model, dataD, targetD)
+#   pred = model_prediction(model , dataTD)
+#   print(model.feature_importances_)
+#   print confusion_matrix(preds, targetTD)
+# #set_model(model, 'RandomForestClassifier.pkl')
+
+
+
