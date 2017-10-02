@@ -21,7 +21,7 @@ def get_more_variables(training=True):
 
 	#get_max_freq_enquiry():
 	enquiry['enq_purpose'] = enquiry['enq_purpose'].astype('category')
-	max_freq_enquiry = enquiry[['customer_no','enq_purpose']].groupby(['customer_no']).agg(lambda x:x.value_counts().index[0]).reset_index()
+	max_freq_enquiry = enquiry.groupby(['customer_no'])['enq_purpose'].agg(lambda x:x.value_counts().index[0]).reset_index(name='max_freq_enquiry')
 
 
 	#get_mean_diff_lastpaymt_opened_dt():
@@ -83,9 +83,9 @@ def get_more_variables(training=True):
 	payment_history_avg_dpd_0_29_bucket = account[account['dpd'] < 30].groupby('customer_no')['dpd'].size().reset_index(name='payment_history_avg_dpd_0_29_bucket')
 
 	#min_months_last_30_plus
-	min_months_last_30_plus = account[account['dpd'] < 30].groupby('customer_no')['dpd'].size().reset_index(name='payment_history_avg_dpd_0_29_bucket')
+	min_months_last_30_plus = account[account['dpd'] < 30].groupby('customer_no')['dpd'].size().reset_index(name='min_months_last_30_plus')
 
-	final_df = mean_diff_open_enquiry_dt.\
+	final_df = pd.DataFrame(mean_diff_open_enquiry_dt.\
 		merge(ratio_currbalance_creditlimit,on='customer_no').\
 		merge(count_enquiry_recency_90,how='left',on='customer_no').\
 		merge(count_enquiry_recency_365,how='left',on='customer_no').\
@@ -96,7 +96,7 @@ def get_more_variables(training=True):
 		merge(payment_history_avg_dpd_0_29_bucket,how='left', on='customer_no').\
 		merge(ut,how='left', on='customer_no').\
 		merge(security,how='left', on='customer_no').\
-		merge(min_months_last_30_plus,how='left', on='customer_no')
+		merge(min_months_last_30_plus,how='left', on='customer_no'))
 	if training:
 		final_df.to_csv(os.path.join(DATA_DIR, NEW_FILE), sep=',')
 	else:
