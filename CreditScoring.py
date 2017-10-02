@@ -1,53 +1,34 @@
-
-# coding: utf-8
-
-# In[20]:
-
 import pandas as pd
 import numpy as np
-import os
-import pickle
-from sklearn.preprocessing import Imputer, LabelEncoder
-from sklearn import linear_model
+import pickle, os
 from settings import *
 from Data_Preparation import get_more_variables
-
-
-# In[2]:
+from sklearn.preprocessing import Imputer, LabelEncoder
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 #Data files
 data = pd.read_csv(os.path.join(DATA_DIR, DATA_TRAINING_FILE))
 data_test = pd.read_csv(os.path.join(DATA_DIR, DATA_TEST_FILE))
 
-
-# In[3]:
-
 #Merging data:
 get_more_variables(True)
 
-
-# In[4]:
-
 get_more_variables(False)
 
-
-# In[5]:
-
 new_data = pd.read_csv(os.path.join(DATA_DIR, NEW_FILE))
+new_data = new_data.drop(new_data.columns[0], axis=1)
 data = data.merge(new_data, on='customer_no')
 
 new_data_test = pd.read_csv(os.path.join(DATA_DIR, NEW_TEST_FILE))
+new_data_test = new_data_test.drop(new_data_test.columns[0], axis=1)
 data_test = data_test.merge(new_data_test, on='customer_no')
-
-
-# In[6]:
 
 features = list(data.columns)
 features.remove('Bad_label')
 target = ['Bad_label']
-
-
-# In[7]:
 
 features_to_drop = ['customer_no', 'feature_20', 'feature_45', 'feature_18','feature_15','feature_17',
                      'feature_47', 'feature_22', 'feature_77', 'feature_24','feature_16','feature_10','feature_61']
@@ -62,116 +43,87 @@ categorical_features = ['feature_67','feature_68','feature_72','feature_73','fea
                          'feature_31','feature_32','feature_33','feature_26','feature_13','feature_55',
                          'feature_57','feature_58','feature_59','feature_60','feature_62','feature_36',
                          'feature_6','feature_34','feature_37','feature_27','feature_38','feature_39',
-                         'feature_40','feature_41','feature_42','feature_43','feature_14','feature_5']
+                         'feature_40','feature_41','feature_42','feature_43','feature_14','feature_5', 'max_freq_enquiry']
 
 continous_features = list(set(features) - set(features_to_drop) - set(date_features) - set(categorical_features))
 
+def get_model(fileName):
+    output = open(os.path.join(DATA_DIR,fileName), 'rb')
+    le = pickle.load(output)
+    output.close()
+    return le
 
-# In[8]:
+def set_model(clf, fileName):
+    output = open(os.path.join(DATA_DIR,fileName), 'wb')
+    pickle.dump(clf, output)
+    output.close()
 
-#removing the unnecessary varibles
-data = data.drop(features_to_drop, 1) 
-data_test = data_test.drop(features_to_drop, 1)
-features = list(set(features) - set(features_to_drop))
+def data_preprocessing(df, training=True):
+    #removing the unnecessary varibles
+    df = df.drop(features_to_drop, 1) 
+    df = df.drop(date_features, 1) 
+    features1 = list(set(features) - set(features_to_drop) - set(date_features))
+     
+    # #date features
+    # for col in date_features:
+    #     try:
+    #         df[col] = pd.to_datetime(df[col], dayfirst=True)
+    #     except:
+    #         pass
 
-data = data.drop(date_features, 1)  
-data_test = data_test.drop(date_features, 1)  
-features = list(set(features) - set(date_features))
+    for col in continous_features:
+        df[col] = df[col].astype(np.float)
+        df[col] = df_test[col].fillna(df_test[col].mean())
 
-
-# In[10]:
-
-# #date features
-# for col in date_features:
-#     try:
-#         data[col] = pd.to_datetime(data[col], dayfirst=True)
-#     except:
-#         pass
-
-for col in continous_features:
-    data[col] = data[col].astype(np.float)
-    data_test[col] = data_test[col].astype(np.float)
-mean_imputer = Imputer(missing_values='NaN', strategy='mean', axis=0)
-mean_imputer = mean_imputer.fit(data[continous_features])
-data[continous_features] = mean_imputer.fit_transform(data[continous_features].values)
-data_test[continous_features] = mean_imputer.fit_transform(data_test[continous_features].values)
-
-
-# In[11]:
-
-#Conversion of categorical variable
-for col in categorical_features:
-    le = LabelEncoder()
-    data[col] = le.fit_transform(data[col].astype(str))
-    data_test[col] = le.fit_transform(data_test[col].astype(str))
-    #data[col] = le.transform(data[col])
-    data[col] = data[col].fillna(data[col].mode())
-    data_test[col] = data_test[col].fillna(data_test[col].mode())
-    
+    #Conversion of categorical variable
+    for col in categorical_features:
+        if training:
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col].astype(str))
+            set_model(le, 'LabelEncoder.pkl')
+            df[col] = df[col].fillna(df[col].mode())
+        else:
+            le  = get_model('LabelEncoder.pkl')
+            df[col] = le.fit_transform(df[col].astype(str))
+    return (df, features1)
 
 
-# In[12]:
+def model_fit(clf, X, y):
+    clf.fit(X, y)
+    return clf 
 
-dataD = data.ix[:, features]
-targetD = data.ix[:, target] 
-
-print dataD.describe()
-print targetD.describe()
+def model_prediction(clf, X):
+    pred = clf.predict(X)
+    return pred
 
 
-# In[18]:
+data, features = data_preprocessing(data)
+data_test, features= data_preprocessing(data_test, False)
+
+dataD, targetD = data.ix[:, features], data.ix[:, target] 
+dataTD, targetTD = data_test.ix[:, features], data_test.ix[:, target] 
 
 # Feature Extraction with RFE
-from pandas import read_csv
-from sklearn.feature_selection import RFE
-from sklearn.linear_model import LogisticRegression
-
-# feature extraction
 model = LogisticRegression()
-rfe = RFE(model, 10)
+rfe = RFE(model, 88)
 fit = rfe.fit(data, targetD)
 print("Num Features: %d") % fit.n_features_
 print("Selected Features: %s") % fit.support_
-print("Feature Ranking: %s") % fit.ranking_
 
-
-# In[19]:
-
-dataD = data.ix[:,fit.support_]
-targetD = data.ix[:, target] 
-
-dataTD = data_test.ix[:,fit.support_]
-targetTD = data_test.ix[:, target] 
+features = [features[i] for i in range(0, len(features)) if fit.support_[i] == True]
+dataD, targetD = data.ix[:, features], data.ix[:, target] 
+dataTD, targetTD = data_test.ix[:, features], data_test.ix[:, target] 
 
 #Initialize logistic regression model
-log_model = linear_model.LogisticRegression()
+model= LogisticRegression()
+model = model_fit(model, dataD, targetD)
+pred = model_prediction(model , dataTD)
+print confusion_matrix(preds, targetTD)
+set_model(model, 'LogisticRegressor.pkl')
 
-# Train the model
-log_model.fit(X = dataD , y = targetD)
-
-# Check trained model intercept
-print(log_model.intercept_)
-
-# Check trained model coefficients
-print(log_model.coef_)
-
-# Make predictions
-preds = log_model.predict(X= dataTD)
-
-# Generate table of predictions vs actual
-print pd.crosstab(preds,targetTD)
-
-
-
-
-# In[22]:
-
-output = open(os.path.join(DATA_DIR, 'LogisticRegressor.pkl'), 'wb')
-pickle.dump(log_model, output)
-output.close()
-
-
-# In[ ]:
-
-
-
+#Initialize Random Forest model
+model= RandomForestClassifier()
+model = model_fit(model, dataD, targetD)
+pred = model_prediction(model , dataTD)
+print confusion_matrix(preds, targetTD)
+set_model(model, 'RandomForestClassifier.pkl')
