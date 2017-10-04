@@ -150,5 +150,17 @@ print max_metric
 #   print confusion_matrix(preds, targetTD)
 # #set_model(model, 'RandomForestClassifier.pkl')
 
-
+model = get_model('RandomForestClassifier.pkl')
+preds = model_prediction(model , dataTD)
+# #Initialize Random Forest model
+# for i in range(0, 1):
+#   model= RandomForestClassifier()
+#   model = model_fit(model, dataD, targetD)
+#   pred = model_prediction(model , dataTD)
+#   print(model.feature_importances_)
+#   print confusion_matrix(preds, targetTD)
+# #set_model(model, 'RandomForestClassifier.pkl')
+from sklearn.metrics import auc
+fpr, tpr, thresholds = roc_curve(np.array(preds.tolist()), np.array(targetTD['Bad_label'].tolist()))
+print "Gini is", (2* round(auc(fpr, tpr), 2)) - 1
 
