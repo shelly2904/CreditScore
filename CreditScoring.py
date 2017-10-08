@@ -7,16 +7,16 @@ from sklearn.preprocessing import Imputer, LabelEncoder
 from sklearn.feature_selection import RFE
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, roc_curve, auc, roc_auc_score
 
-#Data files
+# #Data files
 data = pd.read_csv(os.path.join(DATA_DIR, DATA_TRAINING_FILE))
 data_test = pd.read_csv(os.path.join(DATA_DIR, DATA_TEST_FILE))
 
-#Merging data:
-get_more_variables(True)
+# #Merging data:
+# #get_more_variables(True)
 
-get_more_variables(False)
+# #get_more_variables(False)
 
 new_data = pd.read_csv(os.path.join(DATA_DIR, NEW_FILE))
 new_data = new_data.drop(new_data.columns[0], axis=1)
@@ -26,7 +26,7 @@ new_data_test = pd.read_csv(os.path.join(DATA_DIR, NEW_TEST_FILE))
 new_data_test = new_data_test.drop(new_data_test.columns[0], axis=1)
 data_test = data_test.merge(new_data_test, on='customer_no')
 
-features = list(data.columns)
+features = list(data_test.columns)
 features.remove('Bad_label')
 target = ['Bad_label']
 
@@ -59,7 +59,7 @@ def set_model(clf, fileName):
     output.close()
 
 def data_preprocessing(df, training=True):
-    #removing the unnecessary varibles
+    #removing the unnecessary variables
     df = df.drop(features_to_drop, 1) 
     df = df.drop(date_features, 1) 
     features1 = list(set(features) - set(features_to_drop) - set(date_features))
@@ -103,64 +103,38 @@ data_test, features= data_preprocessing(data_test, False)
 dataD, targetD = data.ix[:, features], data.ix[:, target] 
 dataTD, targetTD = data_test.ix[:, features], data_test.ix[:, target] 
 
-
-# # Feature Extraction with RFE
-# model = LogisticRegression()
-# rfe = RFE(model, 88)
-# fit = rfe.fit(data, targetD)
-# print("Num Features: %d") % fit.n_features_
-# print("Selected Features: %s") % fit.support_
-
-# features = [features[i] for i in range(0, len(features)) if fit.support_[i] == True]
-# dataD, targetD = data.ix[:, features], data.ix[:, target] 
-# dataTD, targetTD = data_test.ix[:, features], data_test.ix[:, target] 
-
-# #Initialize logistic regression model
-# model= LogisticRegression()
-# model = model_fit(model, dataD, targetD)
-# pred = model_prediction(model , dataTD)
-# print confusion_matrix(preds, targetTD)
-# set_model(model, 'LogisticRegressor.pkl')
-
-
 max_metric = 0
-for i in range(1,2):
-    for j in range(1, len(features)):
-      for m in range(1,10):
-        model= RandomForestClassifier(n_estimators=i, max_features=j, min_impurity_split=float(m)/10000)
+for i in range(1,30):
+    for j in range(1, 50):
+        print i,j
+        model= RandomForestClassifier(n_estimators=i, max_features="sqrt", min_samples_leaf=j)
         model = model_fit(model, dataD, targetD)
         preds = model_prediction(model , dataTD)
-        if max_metric < f1_score(preds, targetTD):
-            print i,j, m
-            max_metric = f1_score(preds, targetTD)
+        pred_prob = pd.DataFrame(model.predict_proba(dataTD), columns=['Col_0', 'Col_1'])
+        pred_prob = pred_prob['Col_1']
+        AUC = roc_auc_score(np.array(targetTD['Bad_label'].tolist()), np.array(pred_prob.tolist()))
+        gini_index = (2* round(AUC, 2)) - 1
+        if max_metric < gini_index:
+            print "Best combination", i,j,gini_index
+            max_metric = gini_index
             best_model = model
 
 featues_importance = sorted(zip(map(lambda x: round(x, 4), best_model.feature_importances_), features), reverse=True)
 print best_model.get_params()
 for i in featues_importance:
-  print i
-set_model(best_model, 'RandomForestClassifier.pkl')
-print max_metric
-# #Initialize Random Forest model
-# for i in range(0, 1):
-#   model= RandomForestClassifier()
-#   model = model_fit(model, dataD, targetD)
-#   pred = model_prediction(model , dataTD)
-#   print(model.feature_importances_)
-#   print confusion_matrix(preds, targetTD)
-# #set_model(model, 'RandomForestClassifier.pkl')
+ print i
+set_model(best_model, 'RandomForestClassifier2.pkl')
 
-model = get_model('RandomForestClassifier.pkl')
+#print max_metric
+model = get_model('RandomForestClassifier2.pkl')
 preds = model_prediction(model , dataTD)
-# #Initialize Random Forest model
-# for i in range(0, 1):
-#   model= RandomForestClassifier()
-#   model = model_fit(model, dataD, targetD)
-#   pred = model_prediction(model , dataTD)
-#   print(model.feature_importances_)
-#   print confusion_matrix(preds, targetTD)
-# #set_model(model, 'RandomForestClassifier.pkl')
-from sklearn.metrics import auc
-fpr, tpr, thresholds = roc_curve(np.array(preds.tolist()), np.array(targetTD['Bad_label'].tolist()))
-print "Gini is", (2* round(auc(fpr, tpr), 2)) - 1
+pred_prob = pd.DataFrame(model.predict_proba(dataTD), columns=['Col_0', 'Col_1']) 
+pred_prob = pred_prob['Col_1']
+
+AUC = roc_auc_score(np.array(targetTD['Bad_label'].tolist()), np.array(pred_prob.tolist()))
+gini_index = (2*AUC) - 1
+print 'Gini Index', gini_index
+
+
+
 
